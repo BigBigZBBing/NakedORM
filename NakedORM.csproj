@@ -54,7 +54,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ILWheatBread\ILWheatBread.csproj" />
+    <ProjectReference Include="..\ILWheatBread\ILWheatBread\ILWheatBread.csproj" />
   </ItemGroup>
 
 </Project>

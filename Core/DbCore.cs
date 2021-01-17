@@ -147,7 +147,7 @@ namespace NakedORM.Core
 
             if (entities != null)
             {
-                List<EmitProperty> props = typeof(T).ToEmitProps().ToList();
+                List<FastProperty> props = typeof(T).ToEmitProps().ToList();
                 //参数注入
                 for (int i = 0, t = 0; i < entities.Count; t++)
                 {
@@ -441,7 +441,7 @@ namespace NakedORM.Core
         {
             StringBuilder builder = new StringBuilder();
 
-            List<EmitProperty> props = typeof(T).ToEmitProps().ToList();
+            List<FastProperty> props = typeof(T).ToEmitProps().ToList();
 
             builder.Append(String.Join(" UNION ALL ", GetInsertSet(builder, props, Count)));
 
@@ -455,7 +455,7 @@ namespace NakedORM.Core
         /// <param name="props"></param>
         /// <param name="Count"></param>
         /// <returns></returns>
-        internal static IEnumerable<String> GetInsertSet(StringBuilder builder, IList<EmitProperty> props, Int32 Count)
+        internal static IEnumerable<String> GetInsertSet(StringBuilder builder, IList<FastProperty> props, Int32 Count)
         {
             int test = 0;
             for (int i = 0; i < Count; i++)
@@ -471,7 +471,7 @@ namespace NakedORM.Core
         /// <param name="props"></param>
         /// <param name="index"></param>
         /// <returns></returns>
-        internal static IEnumerable<String> GetInsertField(IList<EmitProperty> props, Int32 index)
+        internal static IEnumerable<String> GetInsertField(IList<FastProperty> props, Int32 index)
         {
             foreach (var prop in props)
             {
@@ -633,20 +633,20 @@ namespace NakedORM.Core
             IEnumerable<T> DataList = null;
 
             //开辟emit容器集合
-            List<EmitProperty> emits = new List<EmitProperty>();
+            List<FastProperty> emits = new List<FastProperty>();
 
             if (Reveal is null)
             {
                 foreach (var prop in typeof(T).GetProperties())
                 {
-                    emits.Add(new EmitProperty(prop));
+                    emits.Add(new FastProperty(prop));
                 }
             }
             else
             {
                 foreach (var prop in ((NewExpression)Reveal.Body).Arguments)
                 {
-                    emits.Add(new EmitProperty((PropertyInfo)((MemberExpression)prop).Member));
+                    emits.Add(new FastProperty((PropertyInfo)((MemberExpression)prop).Member));
                 }
             }
 
@@ -692,13 +692,13 @@ namespace NakedORM.Core
         /// </summary>
         /// <param name="props"></param>
         /// <returns></returns>
-        internal static IEnumerable<EmitProperty> ToEmitProps(this Type type)
+        internal static IEnumerable<FastProperty> ToEmitProps(this Type type)
         {
             foreach (var prop in type.GetProperties()
                 .Where(x => x.CustomAttributes
                 .FirstOrDefault(d => d.AttributeType == typeof(KeyAttribute)) is null))
             {
-                yield return new EmitProperty(prop);
+                yield return new FastProperty(prop);
             }
         }
     }

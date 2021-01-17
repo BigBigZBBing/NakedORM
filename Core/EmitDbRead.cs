@@ -1,7 +1,10 @@
 ﻿using ILWheatBread;
+using ILWheatBread.SmartEmit;
+using ILWheatBread.SmartEmit.Field;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Text;
@@ -54,8 +57,59 @@ namespace NakedORM.Core
         /// <param name="emits"></param>
         /// <param name="pager"></param>
         /// <returns></returns>
-        internal static Func<IDataReader, DbPager, List<T>> DbRead(List<EmitProperty> emits, DbPager pager)
+        internal static Func<IDataReader, DbPager, List<T>> DbRead(List<FastProperty> emits, DbPager pager)
         {
+            SmartBuilder.DynamicMethod<Func<IDataReader, DbPager, List<T>>>(string.Empty, func =>
+            {
+                FieldList<T> retList = func.NewList<T>();
+                FieldObject dread = func.NewObject(func.EmitParamRef(0, typeof(IDataReader)));
+                FieldEntity<DbPager> refpager = func.NewEntity<DbPager>(func.EmitParamRef(1, typeof(DbPager)));
+                FieldObject drecord = dread.As<IDataRecord>();
+
+                func.While(() =>
+                {
+                    func.NewBoolean(dread.Invoke("Read").ReturnRef()).Output();
+                }, () =>
+                {
+                    func.IF(refpager.IsNull() == func.NewBoolean(), () =>
+                    {
+                        var pos = drecord.Invoke("GetOrdinal", func.NewString("TotalCount")).ReturnRef();
+                        func.IF(func.NewBoolean(drecord.Invoke("IsDBNull", pos).ReturnRef()) == func.NewBoolean(false), () =>
+                        {
+                            var value = drecord.Invoke("GetInt64", pos).ReturnRef();
+                            refpager.SetValue("TotalCount", value);
+                        }).IFEnd();
+
+                    }).IFEnd();
+
+                    FieldEntity<T> model = func.NewEntity<T>();
+                    var methods = typeof(IDataRecord).GetMethods().ToList();
+                    foreach (var prop in typeof(T).GetProperties())
+                    {
+                        string propTypeName;
+                        propTypeName = prop.PropertyType.Name;
+
+                        if (prop.PropertyType.Name == "Nullable`1" || prop.PropertyType.Name.StartsWith("Nullable"))
+                            propTypeName = prop.PropertyType.GenericTypeArguments?[0].Name;
+
+                        var method = methods.FirstOrDefault(x => x.Name == "Get" + (propTypeName.Equals("Single") ? "Float" : propTypeName));
+                        if (method != null)
+                        {
+                            var pos = drecord.Invoke("GetOrdinal", func.NewString(prop.Name)).ReturnRef();
+                            func.IF(func.NewBoolean(drecord.Invoke("IsDBNull", pos).ReturnRef()) == func.NewBoolean(false), () =>
+                            {
+                                var value = drecord.Invoke(method.Name, pos).ReturnRef();
+                                model.SetValue(prop.Name, value);
+                            }).IFEnd();
+                        }
+                    }
+                    retList.Add(model);
+                });
+
+                retList.Output();
+                func.EmitReturn();
+            });
+
             DynamicMethod dm = new DynamicMethod(string.Empty, typeof(List<T>), new Type[] { typeof(IDataReader), typeof(DbPager) });
             //初始化IL生成器
             ILGenerator il = dm.GetILGenerator();
@@ -180,7 +234,7 @@ namespace NakedORM.Core
         /// <param name="il"></param>
         /// <param name="emits"></param>
         /// <returns></returns>
-        private static LocalBuilder[] GetColumnIndices(ILGenerator il, IList<EmitProperty> emits)
+        private static LocalBuilder[] GetColumnIndices(ILGenerator il, IList<FastProperty> emits)
         {
             LocalBuilder[] colIndices = new LocalBuilder[emits.Count];
             for (int i = 0; i < colIndices.Length; i++)
@@ -204,7 +258,7 @@ namespace NakedORM.Core
         /// <param name="columnInfoes"></param>
         /// <param name="item"></param>
         /// <param name="Propertys"></param>
-        private static void BuildItem<T>(ILGenerator il, List<EmitProperty> columnInfoes, LocalBuilder item, LocalBuilder[] Propertys)
+        private static void BuildItem<T>(ILGenerator il, List<FastProperty> columnInfoes, LocalBuilder item, LocalBuilder[] Propertys)
         {
             for (int index = 0; index < Propertys.Length; index++)
             {
@@ -283,7 +337,7 @@ namespace NakedORM.Core
         /// <param name="columnInfoes"></param>
         /// <param name="colIndices"></param>
         /// <param name="i"></param>
-        private static void ReadInt32(ILGenerator il, LocalBuilder item, List<EmitProperty> columnInfoes, LocalBuilder[] colIndices, int i)
+        private static void ReadInt32(ILGenerator il, LocalBuilder item, List<FastProperty> columnInfoes, LocalBuilder[] colIndices, int i)
         {
             il.Emit(OpCodes.Ldloc_S, item);
             il.Emit(OpCodes.Ldarg_0);
@@ -300,7 +354,7 @@ namespace NakedORM.Core
         /// <param name="columnInfoes"></param>
         /// <param name="colIndices"></param>
         /// <param name="i"></param>
-        private static void ReadNullableInt32(ILGenerator il, LocalBuilder item, List<EmitProperty> columnInfoes, LocalBuilder[] colIndices, int i)
+        private static void ReadNullableInt32(ILGenerator il, LocalBuilder item, List<FastProperty> columnInfoes, LocalBuilder[] colIndices, int i)
         {
             var local = il.DeclareLocal(columnInfoes[i].PropertyType);
             Label intNull = il.DefineLabel();
@@ -331,7 +385,7 @@ namespace NakedORM.Core
         /// <param name="columnInfoes"></param>
         /// <param name="colIndices"></param>
         /// <param name="i"></param>
-        private static void ReadInt64(ILGenerator il, LocalBuilder item, List<EmitProperty> columnInfoes, LocalBuilder[] colIndices, int i)
+        private static void ReadInt64(ILGenerator il, LocalBuilder item, List<FastProperty> columnInfoes, LocalBuilder[] colIndices, int i)
         {
             il.Emit(OpCodes.Ldloc_S, item);
             il.Emit(OpCodes.Ldarg_0);
@@ -348,7 +402,7 @@ namespace NakedORM.Core
         /// <param name="columnInfoes"></param>
         /// <param name="colIndices"></param>
         /// <param name="i"></param>
-        private static void ReadNullableInt64(ILGenerator il, LocalBuilder item, List<EmitProperty> columnInfoes, LocalBuilder[] colIndices, int i)
+        private static void ReadNullableInt64(ILGenerator il, LocalBuilder item, List<FastProperty> columnInfoes, LocalBuilder[] colIndices, int i)
         {
             var local = il.DeclareLocal(columnInfoes[i].PropertyType);
             Label intNull = il.DefineLabel();
@@ -471,7 +525,7 @@ namespace NakedORM.Core
         /// <param name="columnInfoes"></param>
         /// <param name="colIndices"></param>
         /// <param name="i"></param>
-        private static void ReadObject(ILGenerator il, LocalBuilder item, List<EmitProperty> columnInfoes, LocalBuilder[] colIndices, int i)
+        private static void ReadObject(ILGenerator il, LocalBuilder item, List<FastProperty> columnInfoes, LocalBuilder[] colIndices, int i)
         {
             Label common = il.DefineLabel();
             //item.
